@@ -22,11 +22,12 @@ type Question struct {
 }
 
 type Record struct {
-	Name  string
-	Type  uint16
-	Class uint16
-	TTL   uint32
-	Data  []byte
+	Name        string
+	Type        uint16
+	Class       uint16
+	TTL         uint32
+	Data        []byte
+	DecodedName string // for CNAME, NS, etc
 }
 
 const (
@@ -73,7 +74,6 @@ func EncodeName(name string) []byte {
 	return buf
 }
 
-// DecodeName handles compression pointers
 func DecodeName(data []byte, offset int) (string, int) {
 	var parts []string
 	jumped := false
@@ -90,8 +90,6 @@ func DecodeName(data []byte, offset int) (string, int) {
 			}
 			break
 		}
-
-		// compression pointer
 		if length&0xC0 == 0xC0 {
 			if !jumped {
 				origOffset = offset + 2
@@ -101,7 +99,6 @@ func DecodeName(data []byte, offset int) (string, int) {
 			jumped = true
 			continue
 		}
-
 		offset++
 		if offset+length > len(data) {
 			break
@@ -114,15 +111,17 @@ func DecodeName(data []byte, offset int) (string, int) {
 
 func BuildQuery(name string, qtype uint16) []byte {
 	hdr := Header{
-		ID:      uint16(0x1234), // should randomize this
-		Flags:   0x0100,         // recursion desired
+		ID:      uint16(0x1234),
+		Flags:   0x0100,
 		QDCount: 1,
 	}
 	var buf []byte
 	buf = append(buf, hdr.Marshal()...)
 	buf = append(buf, EncodeName(name)...)
-	buf = append(buf, 0, byte(qtype))   // type
-	buf = append(buf, 0, byte(ClassIN)) // class
+	qb := make([]byte, 4)
+	binary.BigEndian.PutUint16(qb[0:], qtype)
+	binary.BigEndian.PutUint16(qb[2:], ClassIN)
+	buf = append(buf, qb...)
 	return buf
 }
 

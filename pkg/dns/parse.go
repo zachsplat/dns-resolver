@@ -12,6 +12,7 @@ type Response struct {
 	Answers   []Record
 	Authority []Record
 	Extra     []Record
+	raw       []byte // keep raw bytes for name decompression
 }
 
 func ParseResponse(data []byte) (*Response, error) {
@@ -21,11 +22,11 @@ func ParseResponse(data []byte) (*Response, error) {
 
 	resp := &Response{
 		Header: ParseHeader(data),
+		raw:    data,
 	}
 
 	offset := 12
 
-	// parse questions
 	for i := 0; i < int(resp.Header.QDCount); i++ {
 		name, newOff := DecodeName(data, offset)
 		offset = newOff
@@ -41,7 +42,6 @@ func ParseResponse(data []byte) (*Response, error) {
 		resp.Questions = append(resp.Questions, q)
 	}
 
-	// parse records
 	parseRecords := func(count int) ([]Record, error) {
 		var records []Record
 		for i := 0; i < count; i++ {
@@ -58,11 +58,21 @@ func ParseResponse(data []byte) (*Response, error) {
 			}
 			rdlen := binary.BigEndian.Uint16(data[offset+8:])
 			offset += 10
+
+			rdataStart := offset
 			if offset+int(rdlen) > len(data) {
 				return nil, fmt.Errorf("truncated rdata")
 			}
 			r.Data = data[offset : offset+int(rdlen)]
 			offset += int(rdlen)
+
+			// decode name-based rdata types using the full response
+			switch r.Type {
+			case TypeCNAME, TypeNS:
+				decoded, _ := DecodeName(data, rdataStart)
+				r.DecodedName = decoded
+			}
+
 			records = append(records, r)
 		}
 		return records, nil
@@ -85,7 +95,7 @@ func ParseResponse(data []byte) (*Response, error) {
 	return resp, nil
 }
 
-func FormatRecord(r Record, fullData []byte) string {
+func FormatRecord(r Record) string {
 	switch r.Type {
 	case TypeA:
 		if len(r.Data) == 4 {
@@ -96,11 +106,9 @@ func FormatRecord(r Record, fullData []byte) string {
 			return net.IP(r.Data).String()
 		}
 	case TypeCNAME, TypeNS:
-		name, _ := DecodeName(fullData, -1) // hmm this won't work right
-		// actually we need the offset into the full response, not just rdata
-		// TODO: fix this, for now just return raw
-		_ = name
-		return fmt.Sprintf("(raw %d bytes)", len(r.Data))
+		if r.DecodedName != "" {
+			return r.DecodedName
+		}
 	}
-	return fmt.Sprintf("(raw %d bytes)", len(r.Data))
+	return fmt.Sprintf("(%d bytes)", len(r.Data))
 }
