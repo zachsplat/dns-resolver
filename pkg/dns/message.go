@@ -27,7 +27,7 @@ type Record struct {
 	Class       uint16
 	TTL         uint32
 	Data        []byte
-	DecodedName string // for CNAME, NS, etc
+	DecodedName string
 }
 
 const (
@@ -62,8 +62,7 @@ func ParseHeader(data []byte) Header {
 
 func EncodeName(name string) []byte {
 	var buf []byte
-	parts := strings.Split(name, ".")
-	for _, p := range parts {
+	for _, p := range strings.Split(name, ".") {
 		if len(p) == 0 {
 			continue
 		}
@@ -111,7 +110,7 @@ func DecodeName(data []byte, offset int) (string, int) {
 
 func BuildQuery(name string, qtype uint16) []byte {
 	hdr := Header{
-		ID:      uint16(0x1234),
+		ID:      randID(),
 		Flags:   0x0100,
 		QDCount: 1,
 	}
