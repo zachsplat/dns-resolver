@@ -18,3 +18,9 @@ go build -o resolve ./cmd/resolve
 ./resolve -type AAAA example.com
 ./resolve -trace example.com   # show full recursion
 ```
+
+## known issues
+
+- no TCP fallback for large responses
+- cache doesn't respect individual record TTLs, just uses the first one
+- probably breaks on weird EDNS stuff
